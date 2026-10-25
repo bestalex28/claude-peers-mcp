@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { clientToken, TOKEN_HEADER } from "./shared/auth.ts";
 /**
  * claude-peers CLI
  *
@@ -18,10 +19,10 @@ async function brokerFetch<T>(path: string, body?: unknown): Promise<T> {
   const opts: RequestInit = body
     ? {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", [TOKEN_HEADER]: clientToken() },
         body: JSON.stringify(body),
       }
-    : {};
+    : { headers: { [TOKEN_HEADER]: clientToken() } };
   const res = await fetch(`${BROKER_URL}${path}`, {
     ...opts,
     signal: AbortSignal.timeout(3000),

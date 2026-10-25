@@ -31,6 +31,7 @@ import {
   getGitBranch,
   getRecentFiles,
 } from "./shared/summarize.ts";
+import { clientToken, TOKEN_HEADER } from "./shared/auth.ts";
 
 // --- Configuration ---
 
@@ -45,7 +46,7 @@ const BROKER_SCRIPT = new URL("./broker.ts", import.meta.url).pathname;
 async function brokerFetch<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BROKER_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", [TOKEN_HEADER]: clientToken() },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -57,7 +58,7 @@ async function brokerFetch<T>(path: string, body: unknown): Promise<T> {
 
 async function isBrokerAlive(): Promise<boolean> {
   try {
-    const res = await fetch(`${BROKER_URL}/health`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${BROKER_URL}/health`, { signal: AbortSignal.timeout(2000), headers: { [TOKEN_HEADER]: clientToken() } });
     return res.ok;
   } catch {
     return false;

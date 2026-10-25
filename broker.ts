@@ -22,6 +22,7 @@ import type {
   Peer,
   Message,
 } from "./shared/types.ts";
+import { loadOrCreateToken, tokenOk, TOKEN_HEADER } from "./shared/auth.ts";
 
 const PORT = parseInt(process.env.CLAUDE_PEERS_PORT ?? "7899", 10);
 const DB_PATH = process.env.CLAUDE_PEERS_DB ?? `${process.env.HOME}/.claude-peers.db`;
@@ -225,12 +226,22 @@ function handleUnregister(body: { id: string }): void {
 
 // --- HTTP Server ---
 
+const TOKEN = loadOrCreateToken();   // ADAMX S8: every request must carry it
+
 Bun.serve({
   port: PORT,
   hostname: "127.0.0.1",
   async fetch(req) {
     const url = new URL(req.url);
     const path = url.pathname;
+
+    // ADAMX S8: a browser page always sends Origin -> never a peer. Then the shared secret, health included.
+    if (req.headers.get("origin")) {
+      return Response.json({ error: "browser requests refused" }, { status: 403 });
+    }
+    if (!tokenOk(req.headers.get(TOKEN_HEADER), TOKEN)) {
+      return Response.json({ error: "missing or wrong peers token" }, { status: 401 });
+    }
 
     if (req.method !== "POST") {
       if (path === "/health") {
