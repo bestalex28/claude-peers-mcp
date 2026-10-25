@@ -399,10 +399,33 @@ mcp.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
+// --- Push gate (ADAMX 2026-10-25) ---
+// Claude Code only shows channel pushes when it was launched with
+// --dangerously-load-development-channels server:claude-peers (or --channels ...claude-peers).
+// Without that flag the old loop still polled, marked messages delivered and the session dropped them = lost.
+// So: push only when the parent claude's command line carries the flag; otherwise leave messages
+// QUEUED in the broker for the check_messages tool.
+
+function parentHasPeersChannel(): boolean {
+  try {
+    const raw = require("fs").readFileSync(`/proc/${process.ppid}/cmdline`, "utf8") as string;
+    const args = raw.split("\0");
+    return args.some(
+      (a, i) =>
+        (a === "--dangerously-load-development-channels" || a === "--channels") &&
+        (args[i + 1] ?? "").includes("claude-peers")
+    );
+  } catch {
+    return false;
+  }
+}
+
+const PUSH_ENABLED = process.env.CLAUDE_PEERS_FORCE_PUSH === "1" || parentHasPeersChannel();
+
 // --- Polling loop for inbound messages ---
 
 async function pollAndPushMessages() {
-  if (!myId) return;
+  if (!myId || !PUSH_ENABLED) return;
 
   try {
     const result = await brokerFetch<PollMessagesResponse>("/poll-messages", { id: myId });
@@ -515,6 +538,7 @@ async function main() {
   // 5. Connect MCP over stdio
   await mcp.connect(new StdioServerTransport());
   log("MCP connected");
+  log(PUSH_ENABLED ? "Push ON (channel flag present)" : "Push OFF (no channel flag): messages stay queued for check_messages");
 
   // 6. Start polling for inbound messages
   const pollTimer = setInterval(pollAndPushMessages, POLL_INTERVAL_MS);
